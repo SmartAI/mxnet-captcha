@@ -39,6 +39,7 @@ def gen_sample(captcha, width, height):
     img = np.fromstring(img.getvalue(), dtype='uint8')
     img = cv2.imdecode(img, cv2.IMREAD_COLOR)
     img = cv2.resize(img, (width, height))
+
     img = np.multiply(img, 1/255.0)
     img = img.transpose(2, 0, 1)
     return (num, img)
@@ -126,7 +127,7 @@ def Accuracy(label, pred):
 if __name__ == '__main__':
     network = get_ocrnet()
     #devs = [mx.gpu(i) for i in range(1)]
-    devs = [mx.cpu(i) for i in range(1)]
+    devs = mx.cpu()
     model = mx.model.FeedForward(ctx = devs,
                                  symbol = network,
                                  num_epoch = 1,
