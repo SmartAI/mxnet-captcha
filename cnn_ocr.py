@@ -5,8 +5,6 @@ sys.path.insert(0, "../../python")
 import mxnet as mx
 import numpy as np
 import cv2, random
-from io import BytesIO
-from captcha.image import ImageCaptcha
 
 class OCRBatch(object):
     def __init__(self, data_names, data, label_names, label):
@@ -23,59 +21,53 @@ class OCRBatch(object):
     def provide_label(self):
         return [(n, x.shape) for n, x in zip(self.label_names, self.label)]
 
-def gen_rand():
-    buf = ""
-    for i in range(4):
-        buf += str(random.randint(0,9))
-    return buf
 
-def get_label(buf):
-    a = [int(x) for x in buf]
-    return np.array(a)
-
-def gen_sample(captcha, width, height):
-    num = gen_rand()
-    img = captcha.generate(num)
-    img = np.fromstring(img.getvalue(), dtype='uint8')
-    img = cv2.imdecode(img, cv2.IMREAD_COLOR)
+def gen_sample(fpath, width, height):
+    img = cv2.imread(fpath)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img = cv2.resize(img, (width, height))
-
     img = np.multiply(img, 1/255.0)
     img = img.transpose(2, 0, 1)
-    return (num, img)
+    return img
 
 class OCRIter(mx.io.DataIter):
-    def __init__(self, count, batch_size, num_label, height, width):
+    def __init__(self, flist, width=None, height=None, batch_size=1):
         super(OCRIter, self).__init__()
-        #self.captcha = ImageCaptcha(fonts=['./data/Xerox.ttf'])
-        self.captcha = ImageCaptcha()
-
         self.batch_size = batch_size
-        self.count = count
-        self.height = height
-        self.width = width
+        self.img_list = []
+        with open(flist, "r") as fin:
+            self.img_list = fin.read().splitlines()
+        self.count = len(self.img_list)
+        self.cur_index = 0
+        if width == None:
+            width, heigh, _ = cv2.imread(self.img_list[0].split()[0])
+        self.width, self.height = width, height
         self.provide_data = [('data', (batch_size, 3, height, width))]
-        self.provide_label = [('softmax_label', (self.batch_size, num_label))]
+        self.provide_label = [('softmax_label', (self.batch_size, 5))]
 
     def __iter__(self):
         for k in range(self.count / self.batch_size):
             data = []
             label = []
             for i in range(self.batch_size):
-                num, img = gen_sample(self.captcha, self.width, self.height)
+                fpath, num = self.img_list[self.cur_index].split()
+                num = np.array([int(x) for x in num])
+                self.cur_index += 1
+                img = gen_sample(fpath, self.width, self.height)
                 data.append(img)
-                label.append(get_label(num))
-
+                label.append(num)
             data_all = [mx.nd.array(data)]
             label_all = [mx.nd.array(label)]
             data_names = ['data']
             label_names = ['softmax_label']
-
             data_batch = OCRBatch(data_names, data_all, label_names, label_all)
             yield data_batch
 
     def reset(self):
-        pass
+        print 'reseting...'
+        self.cur_index = 0
+        random.shuffle(self.img_list)
+
 
 def get_ocrnet():
     data = mx.symbol.Variable('data')
@@ -102,7 +94,8 @@ def get_ocrnet():
     fc22 = mx.symbol.FullyConnected(data = fc1, num_hidden = 10)
     fc23 = mx.symbol.FullyConnected(data = fc1, num_hidden = 10)
     fc24 = mx.symbol.FullyConnected(data = fc1, num_hidden = 10)
-    fc2 = mx.symbol.Concat(*[fc21, fc22, fc23, fc24], dim = 0)
+    fc25 = mx.symbol.FullyConnected(data = fc1, num_hidden = 10)
+    fc2 = mx.symbol.Concat(*[fc21, fc22, fc23, fc24, fc25], dim = 0)
     label = mx.symbol.transpose(data = label)
     label = mx.symbol.Reshape(data = label, target_shape = (0, ))
     return mx.symbol.SoftmaxOutput(data = fc2, label = label, name = "softmax")
@@ -112,10 +105,10 @@ def Accuracy(label, pred):
     label = label.T.reshape((-1, ))
     hit = 0
     total = 0
-    for i in range(pred.shape[0] / 4):
+    for i in range(pred.shape[0] / 5):
         ok = True
-        for j in range(4):
-            k = i * 4 + j
+        for j in range(5):
+            k = i * 5 + j
             if np.argmax(pred[k]) != int(label[k]):
                 ok = False
                 break
@@ -126,24 +119,22 @@ def Accuracy(label, pred):
 
 if __name__ == '__main__':
     network = get_ocrnet()
-    #devs = [mx.gpu(i) for i in range(1)]
     devs = mx.cpu()
     model = mx.model.FeedForward(ctx = devs,
                                  symbol = network,
-                                 num_epoch = 1,
+                                 num_epoch = 100,
                                  learning_rate = 0.001,
                                  wd = 0.00001,
                                  initializer = mx.init.Xavier(factor_type="in", magnitude=2.34),
                                  momentum = 0.9)
 
     batch_size = 8
-    data_train = OCRIter(100000, batch_size, 4, 30, 80)
-    data_test = OCRIter(1000, batch_size, 4, 30, 80)
+    data_train = OCRIter('./flist.txt', 150, 50, batch_size)
 
     import logging
     head = '%(asctime)-15s %(message)s'
     logging.basicConfig(level=logging.DEBUG, format=head)
 
-    model.fit(X = data_train, eval_data = data_test, eval_metric = Accuracy, batch_end_callback=mx.callback.Speedometer(batch_size, 50),)
+    model.fit(X = data_train, eval_data=data_train, eval_metric = Accuracy, batch_end_callback=mx.callback.Speedometer(batch_size, 20),)
 
     model.save("cnn-ocr")

@@ -7,7 +7,7 @@ with open('flist.txt', 'w') as fin:
     index = 0
     for jpg in jpgs:
         labels = os.path.splitext(jpg)
-        labels = list(os.path.basename(labels[0]))
-        texts = '{}\t{}\t{}\n'.format(index, '\t'.join(labels), jpg)
+        labels = os.path.basename(labels[0])
+        texts = '{}\t{}\n'.format(jpg, labels)
         index +=1
         fin.write(texts)
