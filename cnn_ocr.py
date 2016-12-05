@@ -122,19 +122,20 @@ if __name__ == '__main__':
     devs = mx.cpu()
     model = mx.model.FeedForward(ctx = devs,
                                  symbol = network,
-                                 num_epoch = 100,
+                                 num_epoch = 20,
                                  learning_rate = 0.001,
                                  wd = 0.00001,
                                  initializer = mx.init.Xavier(factor_type="in", magnitude=2.34),
                                  momentum = 0.9)
 
     batch_size = 8
-    data_train = OCRIter('./flist.txt', 150, 50, batch_size)
+    data_train = OCRIter('./flist.txt', 150/2, 50/2, batch_size)
 
     import logging
     head = '%(asctime)-15s %(message)s'
     logging.basicConfig(level=logging.DEBUG, format=head)
 
-    model.fit(X = data_train, eval_data=data_train, eval_metric = Accuracy, batch_end_callback=mx.callback.Speedometer(batch_size, 20),)
+    model.fit(X = data_train, eval_metric = Accuracy, batch_end_callback=mx.callback.Speedometer(batch_size, 20),
+              epoch_end_callback=mx.callback.do_checkpoint('models/chkpt'))
 
     model.save("cnn-ocr")
