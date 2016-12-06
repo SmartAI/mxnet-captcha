@@ -2,7 +2,7 @@ import sys
 import os
 import glob
 
-with open('flist.txt', 'w') as fin:
+with open(sys.argv[2], 'w') as fin:
     jpgs = glob.glob('{}/*.jpg'.format(sys.argv[1]))
     index = 0
     for jpg in jpgs:

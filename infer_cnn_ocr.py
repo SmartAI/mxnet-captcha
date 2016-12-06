@@ -5,9 +5,8 @@ sys.path.insert(0, "../../python")
 import mxnet as mx
 import numpy as np
 import cv2, random
-from io import BytesIO
-from captcha.image import ImageCaptcha
-from cnn_ocr import gen_rand, get_label, gen_sample
+from cnn_ocr import gen_sample
+from collections import namedtuple
 
 def get_ocrnet():
     data = mx.symbol.Variable('data')
@@ -33,27 +32,29 @@ def get_ocrnet():
     fc22 = mx.symbol.FullyConnected(data = fc1, num_hidden = 10)
     fc23 = mx.symbol.FullyConnected(data = fc1, num_hidden = 10)
     fc24 = mx.symbol.FullyConnected(data = fc1, num_hidden = 10)
-    fc2 = mx.symbol.Concat(*[fc21, fc22, fc23, fc24], dim = 0)
+    fc25 = mx.symbol.FullyConnected(data = fc1, num_hidden = 10)
+    fc2 = mx.symbol.Concat(*[fc21, fc22, fc23, fc24, fc25], dim = 0)
+    fc2 = mx.symbol.Concat(*[fc21, fc22, fc23, fc24, fc25], dim = 0)
     return mx.symbol.SoftmaxOutput(data = fc2, name = "softmax")
 
 if __name__ == '__main__':
-    captcha = ImageCaptcha(fonts=['./data/Xerox.ttf'])
-    num, img = gen_sample(captcha, 80, 30)
-    print 'gen captcha:', num
-
     batch_size = 1
-    _, arg_params, __ = mx.model.load_checkpoint("cnn-ocr", 1)
-    data_shape = [("data", (batch_size, 3, 30, 80))]
+    _, arg_params, __ = mx.model.load_checkpoint("models/chkpt", 16)
+    data_shape = [("data", (batch_size, 3, 25, 75))]
     input_shapes = dict(data_shape)
     sym = get_ocrnet()
     executor = sym.simple_bind(ctx = mx.cpu(), **input_shapes)
     for key in executor.arg_dict.keys():
         if key in arg_params:
             arg_params[key].copyto(executor.arg_dict[key])
-
-    executor.forward(is_train = True, data = mx.nd.array([img]))
+    img = gen_sample('/Users/smart/data/dianrong/2235.jpg', 150/2, 50/2)
+    img_show = img.transpose(1, 2, 0)
+    cv2.imshow("img", img_show)
+    img = np.expand_dims(img, axis=0)
+    executor.forward(is_train = True, data = mx.nd.array(img))
     probs = executor.outputs[0].asnumpy()
     line = ''
     for i in range(probs.shape[0]):
         line += str(np.argmax(probs[i]))
     print 'predicted: ' + line
+    ##cv2.waitKey(0)
