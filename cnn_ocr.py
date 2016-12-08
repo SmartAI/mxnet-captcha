@@ -6,21 +6,6 @@ import mxnet as mx
 import numpy as np
 import cv2, random
 
-class OCRBatch(object):
-    def __init__(self, data_names, data, label_names, label):
-        self.data = data
-        self.label = label
-        self.data_names = data_names
-        self.label_names = label_names
-
-    @property
-    def provide_data(self):
-        return [(n, x.shape) for n, x in zip(self.data_names, self.data)]
-
-    @property
-    def provide_label(self):
-        return [(n, x.shape) for n, x in zip(self.label_names, self.label)]
-
 
 def gen_sample(fpath, width, height):
     img = cv2.imread(fpath)
@@ -43,25 +28,30 @@ class OCRIter(mx.io.DataIter):
             width, heigh, _ = cv2.imread(self.img_list[0].split()[0])
         self.width, self.height = width, height
         self.provide_data = [('data', (batch_size, 3, height, width))]
-        self.provide_label = [('softmax_label', (self.batch_size, 5))]
+        self.provide_label = [('softmax1_label', (self.batch_size,)),
+                              ('softmax2_label', (self.batch_size,)),
+                              ('softmax3_label', (self.batch_size,)),
+                              ('softmax4_label', (self.batch_size,)),
+                              ('softmax5_label', (self.batch_size,)),
+        ]
+
 
     def __iter__(self):
         for k in range(self.count / self.batch_size):
             data = []
-            label = []
+            label = [[], [], [], [], []]
             for i in range(self.batch_size):
                 fpath, num = self.img_list[self.cur_index].split()
-                num = np.array([int(x) for x in num])
+                num = [int(x) for x in num]
                 self.cur_index += 1
                 img = gen_sample(fpath, self.width, self.height)
                 data.append(img)
-                label.append(num)
+                for i in range(5):
+                    label[i].append(num[i])
+
             data_all = [mx.nd.array(data)]
-            label_all = [mx.nd.array(label)]
-            data_names = ['data']
-            label_names = ['softmax_label']
-            data_batch = OCRBatch(data_names, data_all, label_names, label_all)
-            yield data_batch
+            label_all = [mx.nd.array(l) for l in label]
+            yield mx.io.DataBatch(data=data_all, label=label_all)
 
     def reset(self):
         print 'reseting...'
@@ -71,7 +61,6 @@ class OCRIter(mx.io.DataIter):
 
 def get_ocrnet():
     data = mx.symbol.Variable('data')
-    label = mx.symbol.Variable('softmax_label')
     conv1 = mx.symbol.Convolution(data=data, kernel=(5,5), num_filter=32)
     pool1 = mx.symbol.Pooling(data=conv1, pool_type="max", kernel=(2,2), stride=(1, 1))
     relu1 = mx.symbol.Activation(data=pool1, act_type="relu")
@@ -95,10 +84,13 @@ def get_ocrnet():
     fc23 = mx.symbol.FullyConnected(data = fc1, num_hidden = 10)
     fc24 = mx.symbol.FullyConnected(data = fc1, num_hidden = 10)
     fc25 = mx.symbol.FullyConnected(data = fc1, num_hidden = 10)
-    fc2 = mx.symbol.Concat(*[fc21, fc22, fc23, fc24, fc25], dim = 0)
-    label = mx.symbol.transpose(data = label)
-    label = mx.symbol.Reshape(data = label, target_shape = (0, ))
-    return mx.symbol.SoftmaxOutput(data = fc2, label = label, name = "softmax")
+    sm1 = mx.symbol.SoftmaxOutput(data=fc21, name='softmax1')
+    sm2 = mx.symbol.SoftmaxOutput(data=fc22, name='softmax2')
+    sm3 = mx.symbol.SoftmaxOutput(data=fc23, name='softmax3')
+    sm4 = mx.symbol.SoftmaxOutput(data=fc24, name='softmax4')
+    sm5 = mx.symbol.SoftmaxOutput(data=fc25, name='softmax5')
+    softmax = mx.symbol.Group([sm1, sm2, sm3, sm4, sm5])
+    return softmax
 
 
 def Accuracy(label, pred):
@@ -119,7 +111,7 @@ def Accuracy(label, pred):
 
 if __name__ == '__main__':
     network = get_ocrnet()
-    devs = mx.cpu()
+    devs = mx.gpu()
     model = mx.model.FeedForward(ctx = devs,
                                  symbol = network,
                                  num_epoch = 20,
@@ -136,6 +128,6 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG, format=head)
 
     model.fit(X = data_train, eval_metric = Accuracy, batch_end_callback=mx.callback.Speedometer(batch_size, 20),
-              epoch_end_callback=mx.callback.do_checkpoint('models/chkpt'))
+              epoch_end_callback=mx.callback.do_checkpoint('models/new_chkpt'))
 
     model.save("cnn-ocr")
