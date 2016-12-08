@@ -1,12 +1,14 @@
 # pylint: disable=C0111,too-many-arguments,too-many-instance-attributes,too-many-locals,redefined-outer-name,fixme
 # pylint: disable=superfluous-parens, no-member, invalid-name
 import sys
-sys.path.insert(0, "../../python")
+import pudb
 import mxnet as mx
 import numpy as np
 import cv2, random
-from cnn_ocr import gen_sample
+from cnn_ocr import gen_sample, OCRIter
 from collections import namedtuple
+
+Batch = namedtuple('Batch', ['data'])
 
 def get_ocrnet():
     data = mx.symbol.Variable('data')
@@ -37,24 +39,36 @@ def get_ocrnet():
     fc2 = mx.symbol.Concat(*[fc21, fc22, fc23, fc24, fc25], dim = 0)
     return mx.symbol.SoftmaxOutput(data = fc2, name = "softmax")
 
+
+def inference_init():
+    batch_size = 1
+    sym, arg_params, aux_params = mx.model.load_checkpoint('models/new_chkpt', 20)
+    mod = mx.mod.Module(symbol=sym, context=mx.cpu())
+    mod.bind(for_training=False, data_shapes=[('data', (1, 3, 25, 75))])
+    mod.set_params(arg_params, aux_params, allow_missing=True)
+    return mod
+
+def inference_process(mod, path):
+    print path
+    img = gen_sample(path, 150/2, 50/2)
+    img = np.expand_dims(img, axis=0)
+    mod.forward(Batch([mx.nd.array(img)]))
+    prob = mod.get_outputs()
+    predicted = ''.join([str(np.argmax(p.asnumpy())) for p in prob])
+    print 'predicted: ' + predicted
+    print predicted
+
+
 if __name__ == '__main__':
     batch_size = 1
-    _, arg_params, __ = mx.model.load_checkpoint("models/chkpt", 16)
-    data_shape = [("data", (batch_size, 3, 25, 75))]
-    input_shapes = dict(data_shape)
-    sym = get_ocrnet()
-    executor = sym.simple_bind(ctx = mx.cpu(), **input_shapes)
-    for key in executor.arg_dict.keys():
-        if key in arg_params:
-            arg_params[key].copyto(executor.arg_dict[key])
-    img = gen_sample('/Users/smart/data/dianrong/2235.jpg', 150/2, 50/2)
-    img_show = img.transpose(1, 2, 0)
-    cv2.imshow("img", img_show)
+    sym, arg_params, aux_params = mx.model.load_checkpoint('models/new_chkpt', 20)
+    mod = mx.mod.Module(symbol=sym, context=mx.cpu())
+    mod.bind(for_training=False, data_shapes=[('data', (1, 3, 25, 75))])
+    mod.set_params(arg_params, aux_params, allow_missing=True)
+    path = '/Users/smart/data/dianrong/train/22483.jpg'
+    img = gen_sample(path, 150/2, 50/2)
     img = np.expand_dims(img, axis=0)
-    executor.forward(is_train = True, data = mx.nd.array(img))
-    probs = executor.outputs[0].asnumpy()
-    line = ''
-    for i in range(probs.shape[0]):
-        line += str(np.argmax(probs[i]))
-    print 'predicted: ' + line
-    ##cv2.waitKey(0)
+    mod.forward(Batch([mx.nd.array(img)]))
+    prob = mod.get_outputs()
+    predicted = ''.join([str(np.argmax(p.asnumpy())) for p in prob])
+    print 'predicted: ' + predicted

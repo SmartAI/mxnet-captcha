@@ -1,1 +1,3 @@
 *.txt
+models
+*.pyc
