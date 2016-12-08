@@ -56,7 +56,7 @@ def inference_process(mod, path):
     prob = mod.get_outputs()
     predicted = ''.join([str(np.argmax(p.asnumpy())) for p in prob])
     print 'predicted: ' + predicted
-    print predicted
+    return predicted
 
 
 if __name__ == '__main__':
