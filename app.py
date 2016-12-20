@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect, url_for, render_template
+from flask import Flask, request, redirect, url_for, render_template, flash
 from werkzeug.utils import secure_filename
 import os
 from infer_cnn_ocr import inference_init, inference_process
@@ -6,6 +6,7 @@ from infer_cnn_ocr import inference_init, inference_process
 app = Flask(__name__)
 UPLOAD_FOLDER = os.path.dirname(os.path.abspath(__file__))
 app.config['UPLOAD_FOLDER'] = os.path.join(UPLOAD_FOLDER, 'static')
+app.secret_key = '1234567ABFDE'
 
 
 inference_handle = inference_init()

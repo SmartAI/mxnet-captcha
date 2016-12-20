@@ -18,8 +18,8 @@ def inference_init():
     return mod
 
 def inference_process(mod, path):
-    print path
-    img = gen_sample(path, 150/2, 50/2)
+    print(path)
+    img = gen_sample(path, 150//2, 50//2)
     img = np.expand_dims(img, axis=0)
     mod.forward(Batch([mx.nd.array(img)]))
     prob = mod.get_outputs()
@@ -30,4 +30,4 @@ def inference_process(mod, path):
 if __name__ == '__main__':
     mod = inference_init()
     predicted = inference_process(mod, '22483.jpg')
-    print predicted
+    print (predicted)

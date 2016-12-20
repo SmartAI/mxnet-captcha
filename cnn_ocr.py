@@ -54,7 +54,7 @@ class OCRIter(mx.io.DataIter):
             yield mx.io.DataBatch(data=data_all, label=label_all)
 
     def reset(self):
-        print 'reseting...'
+        print ('reseting...')
         self.cur_index = 0
         random.shuffle(self.img_list)
 
